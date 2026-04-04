@@ -1,4 +1,4 @@
-# flutter_chat_app
+# Flutter iMessage
 
 A new Flutter project.
 
