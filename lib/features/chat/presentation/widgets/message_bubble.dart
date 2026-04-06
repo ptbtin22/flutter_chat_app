@@ -16,24 +16,6 @@ class MessageBubble extends StatelessWidget {
         mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          if (!isMe) ...[
-            Container(
-              width: 32,
-              height: 32,
-              decoration: const BoxDecoration(
-                color: CupertinoColors.systemGrey4,
-                shape: BoxShape.circle,
-              ),
-              child: const Center(
-                child: Icon(
-                  CupertinoIcons.person_fill,
-                  color: CupertinoColors.white,
-                  size: 20,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-          ],
           Flexible(
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),

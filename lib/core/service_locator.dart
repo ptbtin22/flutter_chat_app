@@ -1,6 +1,8 @@
 import 'package:get_it/get_it.dart';
 import '../features/chat/domain/repositories/chat_repository.dart';
 import '../features/chat/data/repositories/mock_chat_repository_impl.dart';
+import '../features/chat/domain/repositories/user_repository.dart';
+import '../features/chat/data/repositories/mock_user_repository_impl.dart';
 import '../features/chat/presentation/mobx/chat_list_store.dart';
 
 final sl = GetIt.instance;
@@ -9,6 +11,7 @@ void initServiceLocator() {
   // Repositories
   // registerLazySingleton creates it once! Like Swinject's standard container registration.
   sl.registerLazySingleton<ChatRepository>(() => MockChatRepositoryImpl());
+  sl.registerLazySingleton<UserRepository>(() => MockUserRepositoryImpl());
 
   // Stores
   // We want the ChatListStore to persist the loaded chat list across tab switches.
