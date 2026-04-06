@@ -12,4 +12,20 @@ class Chat {
     required this.lastMessageTime,
     this.unreadCount = 0,
   });
+
+  Chat copyWith({
+    String? id,
+    String? contactName,
+    String? lastMessage,
+    DateTime? lastMessageTime,
+    int? unreadCount,
+  }) {
+    return Chat(
+      id: id ?? this.id,
+      contactName: contactName ?? this.contactName,
+      lastMessage: lastMessage ?? this.lastMessage,
+      lastMessageTime: lastMessageTime ?? this.lastMessageTime,
+      unreadCount: unreadCount ?? this.unreadCount,
+    );
+  }
 }

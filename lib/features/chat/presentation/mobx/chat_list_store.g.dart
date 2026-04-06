@@ -82,6 +82,26 @@ mixin _$ChatListStore on _ChatListStoreBase, Store {
     return _$fetchChatsAsyncAction.run(() => super.fetchChats());
   }
 
+  late final _$deleteChatAsyncAction = AsyncAction(
+    '_ChatListStoreBase.deleteChat',
+    context: context,
+  );
+
+  @override
+  Future<void> deleteChat(String chatId) {
+    return _$deleteChatAsyncAction.run(() => super.deleteChat(chatId));
+  }
+
+  late final _$createChatAsyncAction = AsyncAction(
+    '_ChatListStoreBase.createChat',
+    context: context,
+  );
+
+  @override
+  Future<void> createChat(String contactName) {
+    return _$createChatAsyncAction.run(() => super.createChat(contactName));
+  }
+
   late final _$_ChatListStoreBaseActionController = ActionController(
     name: '_ChatListStoreBase',
     context: context,
@@ -94,6 +114,18 @@ mixin _$ChatListStore on _ChatListStoreBase, Store {
     );
     try {
       return super.setSearchQuery(value);
+    } finally {
+      _$_ChatListStoreBaseActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void markAsRead(String chatId) {
+    final _$actionInfo = _$_ChatListStoreBaseActionController.startAction(
+      name: '_ChatListStoreBase.markAsRead',
+    );
+    try {
+      return super.markAsRead(chatId);
     } finally {
       _$_ChatListStoreBaseActionController.endAction(_$actionInfo);
     }

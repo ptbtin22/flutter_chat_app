@@ -46,4 +46,33 @@ abstract class _ChatListStoreBase with Store {
   void setSearchQuery(String value) {
     searchQuery = value;
   }
+
+  @action
+  Future<void> deleteChat(String chatId) async {
+    // Optimistic UI Update instantly deletes it for true native feel
+    allChats.removeWhere((c) => c.id == chatId);
+    // Background execution to the backend/repo
+    await sl<ChatRepository>().deleteChat(chatId);
+  }
+
+  @action
+  void markAsRead(String chatId) {
+    final index = allChats.indexWhere((c) => c.id == chatId);
+    if (index != -1 && allChats[index].unreadCount > 0) {
+      allChats[index] = allChats[index].copyWith(unreadCount: 0);
+    }
+  }
+
+  @action
+  Future<void> createChat(String contactName) async {
+    final newChat = Chat(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      contactName: contactName,
+      lastMessage: 'Tap to start a conversation',
+      lastMessageTime: DateTime.now(),
+    );
+    // Optimistic UI insert at top
+    allChats.insert(0, newChat);
+    await sl<ChatRepository>().createChat(contactName);
+  }
 }
