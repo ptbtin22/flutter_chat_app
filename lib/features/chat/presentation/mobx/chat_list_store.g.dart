@@ -72,20 +72,52 @@ mixin _$ChatListStore on _ChatListStoreBase, Store {
     });
   }
 
-  late final _$fetchChatsAsyncAction = AsyncAction(
-    '_ChatListStoreBase.fetchChats',
+  late final _$errorMessageAtom = Atom(
+    name: '_ChatListStoreBase.errorMessage',
     context: context,
   );
 
   @override
-  Future<void> fetchChats() {
-    return _$fetchChatsAsyncAction.run(() => super.fetchChats());
+  String? get errorMessage {
+    _$errorMessageAtom.reportRead();
+    return super.errorMessage;
+  }
+
+  @override
+  set errorMessage(String? value) {
+    _$errorMessageAtom.reportWrite(value, super.errorMessage, () {
+      super.errorMessage = value;
+    });
   }
 
   late final _$_ChatListStoreBaseActionController = ActionController(
     name: '_ChatListStoreBase',
     context: context,
   );
+
+  @override
+  void listenToChats() {
+    final _$actionInfo = _$_ChatListStoreBaseActionController.startAction(
+      name: '_ChatListStoreBase.listenToChats',
+    );
+    try {
+      return super.listenToChats();
+    } finally {
+      _$_ChatListStoreBaseActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void stopListening() {
+    final _$actionInfo = _$_ChatListStoreBaseActionController.startAction(
+      name: '_ChatListStoreBase.stopListening',
+    );
+    try {
+      return super.stopListening();
+    } finally {
+      _$_ChatListStoreBaseActionController.endAction(_$actionInfo);
+    }
+  }
 
   @override
   void setSearchQuery(String value) {
@@ -105,6 +137,7 @@ mixin _$ChatListStore on _ChatListStoreBase, Store {
 allChats: ${allChats},
 searchQuery: ${searchQuery},
 isLoading: ${isLoading},
+errorMessage: ${errorMessage},
 filteredChats: ${filteredChats}
     ''';
   }

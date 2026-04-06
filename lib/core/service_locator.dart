@@ -1,19 +1,28 @@
 import 'package:get_it/get_it.dart';
+import '../features/auth/domain/repositories/auth_repository.dart';
+import '../features/auth/data/repositories/firebase_auth_repository_impl.dart';
+import '../features/auth/presentation/mobx/auth_store.dart';
 import '../features/chat/domain/repositories/chat_repository.dart';
-import '../features/chat/data/repositories/mock_chat_repository_impl.dart';
+import '../features/chat/data/repositories/firestore_chat_repository_impl.dart';
 import '../features/chat/presentation/mobx/chat_list_store.dart';
 
 final sl = GetIt.instance;
 
 void initServiceLocator() {
-  // Repositories
-  // registerLazySingleton creates it once! Like Swinject's standard container registration.
-  sl.registerLazySingleton<ChatRepository>(() => MockChatRepositoryImpl());
+  // ── Auth ──────────────────────────────────────────────────────────────────
+  sl.registerLazySingleton<AuthRepository>(
+    () => FirebaseAuthRepositoryImpl(),
+  );
 
-  // Stores
-  // We want the ChatListStore to persist the loaded chat list across tab switches.
+  sl.registerLazySingleton<AuthStore>(
+    () => AuthStore(sl<AuthRepository>()),
+  );
+
+  // ── Chat ──────────────────────────────────────────────────────────────────
+  sl.registerLazySingleton<ChatRepository>(
+    () => FirestoreChatRepositoryImpl(),
+  );
+
+  // Store dùng lazy singleton để giữ state khi chuyển tab
   sl.registerLazySingleton<ChatListStore>(() => ChatListStore());
-  
-  // TODO: We will use sl.registerFactory<ChatDetailStore>(() => ChatDetailStore());
-  // Later when we make the ChatDetailScreen use MobX! 
 }

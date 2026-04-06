@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter_chat_app/features/auth/domain/repositories/auth_repository.dart';
 import '../../domain/entities/message.dart';
 import '../../../../core/service_locator.dart';
 import '../../domain/repositories/chat_repository.dart';
@@ -8,7 +10,11 @@ class ChatDetailScreen extends StatefulWidget {
   final String chatId;
   final String contactName;
 
-  const ChatDetailScreen({super.key, required this.chatId, required this.contactName});
+  const ChatDetailScreen({
+    super.key,
+    required this.chatId,
+    required this.contactName,
+  });
 
   @override
   State<ChatDetailScreen> createState() => _ChatDetailScreenState();
@@ -16,69 +22,68 @@ class ChatDetailScreen extends StatefulWidget {
 
 class _ChatDetailScreenState extends State<ChatDetailScreen> {
   late final ChatRepository _chatRepository = sl<ChatRepository>();
-  
+  late final AuthRepository _authRepository = sl<AuthRepository>();
+
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
+  StreamSubscription<List<Message>>? _subscription;
   List<Message> _messages = [];
   bool _isLoading = true;
+  bool _isSending = false;
 
   @override
   void initState() {
     super.initState();
-    _fetchMessages();
+    _subscribeToMessages();
   }
 
-  Future<void> _fetchMessages() async {
-    final msgs = await _chatRepository.getMessages(widget.chatId);
-    if (mounted) {
-      setState(() {
-        _messages = List.from(msgs); // Create mutable list based on mocked data
-        _isLoading = false;
-      });
-      _scrollToBottom();
-    }
+  void _subscribeToMessages() {
+    final currentUid = _authRepository.currentUser?.uid ?? '';
+    _subscription = _chatRepository
+        .messagesStream(widget.chatId, currentUid)
+        .listen((messages) {
+      if (mounted) {
+        final wasEmpty = _messages.isEmpty;
+        setState(() {
+          _messages = messages;
+          _isLoading = false;
+        });
+        if (wasEmpty || messages.isNotEmpty) {
+          _scrollToBottom();
+        }
+      }
+    }, onError: (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    });
   }
 
-  void _sendMessage() async {
-    if (_textController.text.trim().isEmpty) return;
+  Future<void> _sendMessage() async {
+    if (_textController.text.trim().isEmpty || _isSending) return;
+
+    final currentUser = _authRepository.currentUser;
+    if (currentUser == null) return;
+
+    final text = _textController.text.trim();
+    _textController.clear();
+
+    setState(() => _isSending = true);
 
     final newMessage = Message(
-      text: _textController.text,
+      text: text,
+      senderId: currentUser.uid,
       isMe: true,
       timestamp: DateTime.now(),
     );
 
-    setState(() {
-      _messages.add(newMessage);
-    });
-
-    final textSent = _textController.text;
-    _textController.clear();
-    _scrollToBottom();
-
-    // Persist to Mock Repository
-    await _chatRepository.sendMessage(widget.chatId, newMessage);
-
-    // Fake an automated reply
-    Future.delayed(const Duration(seconds: 1), () async {
-      if (!mounted) return;
-      
-      final reply = Message(
-        text: "Automated mock reply to: '$textSent' \u{1F916}",
-        isMe: false,
-        timestamp: DateTime.now(),
-      );
-      
-      await _chatRepository.sendMessage(widget.chatId, reply);
-      
-      if (mounted) {
-        setState(() {
-          _messages.add(reply);
-        });
-        _scrollToBottom();
-      }
-    });
+    try {
+      await _chatRepository.sendMessage(widget.chatId, newMessage);
+      _scrollToBottom();
+    } finally {
+      if (mounted) setState(() => _isSending = false);
+    }
   }
 
   void _scrollToBottom() {
@@ -95,6 +100,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
 
   @override
   void dispose() {
+    _subscription?.cancel();
     _textController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -104,7 +110,14 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
-        middle: Text(widget.contactName),
+        middle: Column(
+          children: [
+            Text(
+              widget.contactName,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
         border: const Border(
           bottom: BorderSide(color: CupertinoColors.systemGrey4, width: 0.5),
         ),
@@ -114,20 +127,29 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         child: Column(
           children: [
             Expanded(
-              child: _isLoading 
-                ? const Center(child: CupertinoActivityIndicator()) 
-                : ListView.builder(
-                controller: _scrollController,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16.0,
-                  vertical: 12.0,
-                ),
-                itemCount: _messages.length,
-                itemBuilder: (context, index) {
-                  final message = _messages[index];
-                  return MessageBubble(message: message);
-                },
-              ),
+              child: _isLoading
+                  ? const Center(child: CupertinoActivityIndicator())
+                  : _messages.isEmpty
+                      ? const Center(
+                          child: Text(
+                            'Hãy bắt đầu cuộc trò chuyện! 👋',
+                            style: TextStyle(
+                              color: CupertinoColors.systemGrey,
+                              fontSize: 15,
+                            ),
+                          ),
+                        )
+                      : ListView.builder(
+                          controller: _scrollController,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16.0,
+                            vertical: 12.0,
+                          ),
+                          itemCount: _messages.length,
+                          itemBuilder: (context, index) {
+                            return MessageBubble(message: _messages[index]);
+                          },
+                        ),
             ),
             _buildMessageInput(context),
           ],
@@ -139,12 +161,11 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   Widget _buildMessageInput(BuildContext context) {
     return Container(
       padding: EdgeInsets.only(
-        left: 10.0, 
-        right: 10.0, 
-        top: 8.0, 
+        left: 10.0,
+        right: 10.0,
+        top: 8.0,
         bottom: 8.0 + MediaQuery.of(context).padding.bottom,
       ),
-      // Adding top border to simulate iMessage input area
       decoration: const BoxDecoration(
         color: CupertinoColors.systemGroupedBackground,
         border: Border(
@@ -154,11 +175,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          CupertinoButton(
-            padding: const EdgeInsets.only(bottom: 5.0, right: 8.0, left: 4.0),
-            onPressed: () {},
-            child: const Icon(CupertinoIcons.add, size: 28),
-          ),
+          const SizedBox(width: 8),
           Expanded(
             child: Container(
               constraints: const BoxConstraints(maxHeight: 120),
@@ -180,21 +197,29 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                   ),
                   borderRadius: BorderRadius.circular(20.0),
                 ),
+                onSubmitted: (_) => _sendMessage(),
                 suffix: CupertinoButton(
                   padding: EdgeInsets.zero,
-                  onPressed: _sendMessage,
+                  onPressed: _isSending ? null : _sendMessage,
                   child: Container(
                     margin: const EdgeInsets.all(4.0),
-                    decoration: const BoxDecoration(
-                      color: CupertinoColors.activeBlue,
+                    decoration: BoxDecoration(
+                      color: _isSending
+                          ? CupertinoColors.systemGrey3
+                          : CupertinoColors.activeBlue,
                       shape: BoxShape.circle,
                     ),
                     padding: const EdgeInsets.all(4.0),
-                    child: const Icon(
-                      CupertinoIcons.arrow_up,
-                      color: CupertinoColors.white,
-                      size: 18,
-                    ),
+                    child: _isSending
+                        ? const CupertinoActivityIndicator(
+                            color: CupertinoColors.white,
+                            radius: 9,
+                          )
+                        : const Icon(
+                            CupertinoIcons.arrow_up,
+                            color: CupertinoColors.white,
+                            size: 18,
+                          ),
                   ),
                 ),
               ),
