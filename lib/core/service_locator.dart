@@ -5,6 +5,7 @@ import '../features/auth/presentation/mobx/auth_store.dart';
 import '../features/chat/domain/repositories/chat_repository.dart';
 import '../features/chat/data/repositories/firestore_chat_repository_impl.dart';
 import '../features/chat/presentation/mobx/chat_list_store.dart';
+import '../features/chat/presentation/mobx/chat_detail_store.dart';
 
 final sl = GetIt.instance;
 
@@ -25,4 +26,8 @@ void initServiceLocator() {
 
   // Store dùng lazy singleton để giữ state khi chuyển tab
   sl.registerLazySingleton<ChatListStore>(() => ChatListStore());
+
+  sl.registerFactoryParam<ChatDetailStore, String, void>(
+    (chatId, _) => ChatDetailStore(chatId: chatId),
+  );
 }

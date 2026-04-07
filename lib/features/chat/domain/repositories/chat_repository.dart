@@ -6,7 +6,7 @@ abstract class ChatRepository {
   Stream<List<Chat>> chatsStream(String currentUid);
 
   /// Real-time stream messages của một chat
-  Stream<List<Message>> messagesStream(String chatId, String currentUid);
+  Stream<List<Message>> messagesStream(String chatId, String currentUid, {int limit = 20});
 
   /// Gửi tin nhắn vào chat đã tồn tại
   Future<void> sendMessage(String chatId, Message message);
@@ -18,4 +18,8 @@ abstract class ChatRepository {
     required String currentDisplayName,
     required String otherEmail,
   });
+
+  Future<void> updateTypingStatus(String chatId, String currentUid, bool isTyping);
+  Stream<bool> typingStatusStream(String chatId, String otherUid);
+  Future<void> markMessagesAsRead(String chatId, String currentUid);
 }

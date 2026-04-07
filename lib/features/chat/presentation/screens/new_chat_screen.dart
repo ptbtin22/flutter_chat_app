@@ -59,6 +59,7 @@ class _NewChatScreenState extends State<NewChatScreen> {
             builder: (_) => ChatDetailScreen(
               chatId: chatId,
               contactName: email.split('@').first,
+              contactUid: '',
             ),
           ),
         );
