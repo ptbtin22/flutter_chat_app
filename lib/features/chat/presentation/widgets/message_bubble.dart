@@ -35,23 +35,39 @@ class MessageBubble extends StatelessWidget {
             const SizedBox(width: 8),
           ],
           Flexible(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
-              decoration: BoxDecoration(
-                // iMessage style blue for me, gray for them
-                color: isMe ? CupertinoColors.activeBlue : CupertinoColors.systemGrey5,
-                borderRadius: BorderRadius.circular(20.0).copyWith(
-                  bottomRight: isMe ? const Radius.circular(0) : null,
-                  bottomLeft: !isMe ? const Radius.circular(0) : null,
+            child: Column(
+              crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
+                  decoration: BoxDecoration(
+                    // iMessage style blue for me, gray for them
+                    color: isMe ? CupertinoColors.activeBlue : CupertinoColors.systemGrey5,
+                    borderRadius: BorderRadius.circular(20.0).copyWith(
+                      bottomRight: isMe ? const Radius.circular(0) : null,
+                      bottomLeft: !isMe ? const Radius.circular(0) : null,
+                    ),
+                  ),
+                  child: Text(
+                    message.text,
+                    style: TextStyle(
+                      color: isMe ? CupertinoColors.white : CupertinoColors.black,
+                      fontSize: 16.0,
+                    ),
+                  ),
                 ),
-              ),
-              child: Text(
-                message.text,
-                style: TextStyle(
-                  color: isMe ? CupertinoColors.white : CupertinoColors.black,
-                  fontSize: 16.0,
-                ),
-              ),
+                if (isMe && message.isRead) ...[
+                  const SizedBox(height: 2),
+                  const Text(
+                    'Đã xem',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: CupertinoColors.systemGrey,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ],

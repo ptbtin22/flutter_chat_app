@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../domain/entities/chat.dart';
 import '../../domain/entities/message.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import '../../domain/repositories/chat_repository.dart';
 
 class FirestoreChatRepositoryImpl implements ChatRepository {
@@ -25,7 +26,15 @@ class FirestoreChatRepositoryImpl implements ChatRepository {
     int generation = 0;
 
     controller = StreamController<List<Chat>>(
-      onListen: () {
+      onListen: () async {
+        try {
+          final box = await Hive.openBox<List>('chats_box');
+          final cachedList = box.get('my_chats_$currentUid')?.cast<Chat>();
+          if (cachedList != null && cachedList.isNotEmpty && !controller.isClosed) {
+            controller.add(cachedList);
+          }
+        } catch (_) {}
+
         upstream = _firestore
             .collection('chats')
             .where('participants', arrayContains: currentUid)
@@ -90,7 +99,13 @@ class FirestoreChatRepositoryImpl implements ChatRepository {
               }
 
               chats.sort((a, b) => b.lastMessageTime.compareTo(a.lastMessageTime));
-              controller.add(chats);
+              
+              try {
+                final box = Hive.box<List>('chats_box');
+                box.put('my_chats_$currentUid', chats);
+              } catch (_) {}
+              
+              if (!controller.isClosed) controller.add(chats);
             }).catchError((e) {
               if (!controller.isClosed) controller.addError(e);
             });
@@ -113,16 +128,46 @@ class FirestoreChatRepositoryImpl implements ChatRepository {
   // ── Messages Stream ──────────────────────────────────────────────────────────
 
   @override
-  Stream<List<Message>> messagesStream(String chatId, String currentUid) {
-    return _firestore
-        .collection('chats')
-        .doc(chatId)
-        .collection('messages')
-        .orderBy('timestamp', descending: false)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => Message.fromFirestore(doc, currentUid))
-            .toList());
+  Stream<List<Message>> messagesStream(String chatId, String currentUid, {int limit = 20}) {
+    late StreamController<List<Message>> controller;
+    StreamSubscription? upstream;
+
+    controller = StreamController<List<Message>>(
+      onListen: () async {
+        try {
+          final box = await Hive.openBox<List>('messages_box');
+          final cached = box.get('msgs_$chatId')?.cast<Message>();
+          if (cached != null && cached.isNotEmpty && !controller.isClosed) {
+            controller.add(cached);
+          }
+        } catch (_) {}
+
+        upstream = _firestore
+            .collection('chats')
+            .doc(chatId)
+            .collection('messages')
+            .orderBy('timestamp', descending: true)
+            .limit(limit)
+            .snapshots()
+            .listen((snapshot) {
+              final msgs = snapshot.docs.map((doc) => Message.fromFirestore(doc, currentUid)).toList();
+              
+              try {
+                 final box = Hive.box<List>('messages_box');
+                 box.put('msgs_$chatId', msgs);
+              } catch (_) {}
+
+              if (!controller.isClosed) controller.add(msgs);
+            }, onError: (e) {
+              if (!controller.isClosed) controller.addError(e);
+            });
+      },
+      onCancel: () {
+        upstream?.cancel();
+      },
+    );
+
+    return controller.stream;
   }
 
   // ── Send Message ─────────────────────────────────────────────────────────────
@@ -145,6 +190,55 @@ class FirestoreChatRepositoryImpl implements ChatRepository {
     });
 
     await batch.commit();
+  }
+
+  // ── Advanced Features ────────────────────────────────────────────────────────
+
+  @override
+  Future<void> updateTypingStatus(String chatId, String currentUid, bool isTyping) async {
+    await _firestore.collection('chats').doc(chatId).update({
+      'typing_$currentUid': isTyping,
+    }).catchError((_) {}); // Ignore if document missing
+  }
+
+  @override
+  Stream<bool> typingStatusStream(String chatId, String otherUid) {
+    return _firestore.collection('chats').doc(chatId).snapshots().map((doc) {
+      final data = doc.data();
+      return (data?['typing_$otherUid'] as bool?) ?? false;
+    });
+  }
+
+  @override
+  Future<void> markMessagesAsRead(String chatId, String currentUid) async {
+    // Drop the strict .where('isRead', isEqualTo: false) query!
+    // If old text messages didn't have the 'isRead' field natively yet, Firestore drops them completely from that strict query.
+    // Fetching natively and filtering via Dart fixes the schema migration bug instantly.
+    final snapshot = await _firestore
+        .collection('chats')
+        .doc(chatId)
+        .collection('messages')
+        .where('senderId', isNotEqualTo: currentUid)
+        .get();
+
+    if (snapshot.docs.isEmpty) return;
+
+    final batch = _firestore.batch();
+    bool hasUpdates = false;
+
+    for (var doc in snapshot.docs) {
+      final data = doc.data();
+      if (data['isRead'] != true) {
+        batch.update(doc.reference, {'isRead': true});
+        hasUpdates = true;
+      }
+    }
+    
+    if (hasUpdates) {
+      final chatRef = _firestore.collection('chats').doc(chatId);
+      batch.update(chatRef, {'unreadCount': 0});
+      await batch.commit();
+    }
   }
 
   // ── Find or Create Chat ──────────────────────────────────────────────────────

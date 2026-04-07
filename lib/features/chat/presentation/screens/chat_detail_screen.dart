@@ -1,19 +1,19 @@
-import 'dart:async';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter_chat_app/features/auth/domain/repositories/auth_repository.dart';
-import '../../domain/entities/message.dart';
+import 'package:flutter_mobx/flutter_mobx.dart';
 import '../../../../core/service_locator.dart';
-import '../../domain/repositories/chat_repository.dart';
+import '../mobx/chat_detail_store.dart';
 import '../widgets/message_bubble.dart';
 
 class ChatDetailScreen extends StatefulWidget {
   final String chatId;
   final String contactName;
+  final String contactUid;
 
   const ChatDetailScreen({
     super.key,
     required this.chatId,
     required this.contactName,
+    required this.contactUid,
   });
 
   @override
@@ -21,86 +21,41 @@ class ChatDetailScreen extends StatefulWidget {
 }
 
 class _ChatDetailScreenState extends State<ChatDetailScreen> {
-  late final ChatRepository _chatRepository = sl<ChatRepository>();
-  late final AuthRepository _authRepository = sl<AuthRepository>();
+  late final ChatDetailStore _store = sl<ChatDetailStore>(param1: widget.chatId);
 
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
-  StreamSubscription<List<Message>>? _subscription;
-  List<Message> _messages = [];
-  bool _isLoading = true;
-  bool _isSending = false;
-
   @override
   void initState() {
     super.initState();
-    _subscribeToMessages();
-  }
+    _store.initStream(widget.contactUid);
 
-  void _subscribeToMessages() {
-    final currentUid = _authRepository.currentUser?.uid ?? '';
-    _subscription = _chatRepository
-        .messagesStream(widget.chatId, currentUid)
-        .listen((messages) {
-      if (mounted) {
-        final wasEmpty = _messages.isEmpty;
-        setState(() {
-          _messages = messages;
-          _isLoading = false;
-        });
-        if (wasEmpty || messages.isNotEmpty) {
-          _scrollToBottom();
-        }
-      }
-    }, onError: (e) {
-      if (mounted) {
-        setState(() => _isLoading = false);
+    _scrollController.addListener(() {
+      if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 50) {
+        _store.loadMore();
       }
     });
   }
 
   Future<void> _sendMessage() async {
-    if (_textController.text.trim().isEmpty || _isSending) return;
-
-    final currentUser = _authRepository.currentUser;
-    if (currentUser == null) return;
-
     final text = _textController.text.trim();
-    _textController.clear();
+    if (text.isEmpty || _store.isSending) return;
 
-    setState(() => _isSending = true);
-
-    final newMessage = Message(
-      text: text,
-      senderId: currentUser.uid,
-      isMe: true,
-      timestamp: DateTime.now(),
-    );
-
-    try {
-      await _chatRepository.sendMessage(widget.chatId, newMessage);
-      _scrollToBottom();
-    } finally {
-      if (mounted) setState(() => _isSending = false);
+    _textController.clear(); // Optimistic clear
+    await _store.sendMessage(text);
+    if (_scrollController.hasClients && _scrollController.position.pixels > 0) {
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
     }
-  }
-
-  void _scrollToBottom() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
-      }
-    });
   }
 
   @override
   void dispose() {
-    _subscription?.cancel();
+    _store.dispose();
     _textController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -127,29 +82,67 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         child: Column(
           children: [
             Expanded(
-              child: _isLoading
-                  ? const Center(child: CupertinoActivityIndicator())
-                  : _messages.isEmpty
-                      ? const Center(
-                          child: Text(
-                            'Hãy bắt đầu cuộc trò chuyện! 👋',
-                            style: TextStyle(
-                              color: CupertinoColors.systemGrey,
-                              fontSize: 15,
-                            ),
-                          ),
-                        )
-                      : ListView.builder(
-                          controller: _scrollController,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16.0,
-                            vertical: 12.0,
-                          ),
-                          itemCount: _messages.length,
-                          itemBuilder: (context, index) {
-                            return MessageBubble(message: _messages[index]);
-                          },
+              child: Observer(
+                builder: (_) {
+                  if (_store.isLoading) {
+                    return const Center(child: CupertinoActivityIndicator());
+                  }
+
+                  if (_store.messages.isEmpty) {
+                    return const Center(
+                      child: Text(
+                        'Hãy bắt đầu cuộc trò chuyện! 👋',
+                        style: TextStyle(
+                          color: CupertinoColors.systemGrey,
+                          fontSize: 15,
                         ),
+                      ),
+                    );
+                  }
+
+                  return ListView.builder(
+                    controller: _scrollController,
+                    reverse: true,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16.0,
+                      vertical: 12.0,
+                    ),
+                    itemCount: _store.messages.length + (_store.isOtherTyping ? 1 : 0),
+                    itemBuilder: (context, index) {
+                      if (_store.isOtherTyping && index == 0) {
+                         return Padding(
+                           padding: const EdgeInsets.only(top: 8.0, bottom: 8.0),
+                           child: Row(
+                             crossAxisAlignment: CrossAxisAlignment.end,
+                             children: [
+                               Container(
+                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                 decoration: BoxDecoration(
+                                   color: CupertinoColors.systemGrey5,
+                                   borderRadius: BorderRadius.circular(16),
+                                 ),
+                                 child: const Text(
+                                   'Đang soạn tin...',
+                                   style: TextStyle(
+                                     fontSize: 14,
+                                     fontStyle: FontStyle.italic,
+                                     color: CupertinoColors.systemGrey,
+                                   ),
+                                 ),
+                               ),
+                             ],
+                           ),
+                         );
+                      }
+                      
+                      final messageIndex = _store.isOtherTyping ? index - 1 : index;
+                      if (messageIndex >= _store.messages.length) return const SizedBox.shrink();
+                      
+                      return MessageBubble(message: _store.messages[messageIndex]);
+                    },
+                  );
+                },
+              ),
             ),
             _buildMessageInput(context),
           ],
@@ -197,29 +190,32 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                   ),
                   borderRadius: BorderRadius.circular(20.0),
                 ),
+                onChanged: (_) => _store.reportTyping(),
                 onSubmitted: (_) => _sendMessage(),
-                suffix: CupertinoButton(
-                  padding: EdgeInsets.zero,
-                  onPressed: _isSending ? null : _sendMessage,
-                  child: Container(
-                    margin: const EdgeInsets.all(4.0),
-                    decoration: BoxDecoration(
-                      color: _isSending
-                          ? CupertinoColors.systemGrey3
-                          : CupertinoColors.activeBlue,
-                      shape: BoxShape.circle,
+                suffix: Observer(
+                  builder: (_) => CupertinoButton(
+                    padding: EdgeInsets.zero,
+                    onPressed: _store.isSending ? null : _sendMessage,
+                    child: Container(
+                      margin: const EdgeInsets.all(4.0),
+                      decoration: BoxDecoration(
+                        color: _store.isSending
+                            ? CupertinoColors.systemGrey3
+                            : CupertinoColors.activeBlue,
+                        shape: BoxShape.circle,
+                      ),
+                      padding: const EdgeInsets.all(4.0),
+                      child: _store.isSending
+                          ? const CupertinoActivityIndicator(
+                              color: CupertinoColors.white,
+                              radius: 9,
+                            )
+                          : const Icon(
+                              CupertinoIcons.arrow_up,
+                              color: CupertinoColors.white,
+                              size: 18,
+                            ),
                     ),
-                    padding: const EdgeInsets.all(4.0),
-                    child: _isSending
-                        ? const CupertinoActivityIndicator(
-                            color: CupertinoColors.white,
-                            radius: 9,
-                          )
-                        : const Icon(
-                            CupertinoIcons.arrow_up,
-                            color: CupertinoColors.white,
-                            size: 18,
-                          ),
                   ),
                 ),
               ),

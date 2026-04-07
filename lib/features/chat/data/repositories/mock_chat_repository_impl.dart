@@ -51,7 +51,7 @@ class MockChatRepositoryImpl implements ChatRepository {
   }
 
   @override
-  Stream<List<Message>> messagesStream(String chatId, String currentUid) async* {
+  Stream<List<Message>> messagesStream(String chatId, String currentUid, {int limit = 20}) async* {
     await Future.delayed(const Duration(milliseconds: 300));
     yield _mockMessages[chatId] ?? [
       Message(
@@ -71,6 +71,17 @@ class MockChatRepositoryImpl implements ChatRepository {
     }
     _mockMessages[chatId]!.add(message);
   }
+
+  @override
+  Future<void> updateTypingStatus(String chatId, String currentUid, bool isTyping) async {}
+
+  @override
+  Stream<bool> typingStatusStream(String chatId, String otherUid) async* {
+    yield false;
+  }
+
+  @override
+  Future<void> markMessagesAsRead(String chatId, String currentUid) async {}
 
   @override
   Future<String> findOrCreateChat({

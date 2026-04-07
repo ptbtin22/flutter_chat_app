@@ -6,6 +6,7 @@ class Message {
   final String senderId;   // Firebase UID của người gửi
   final bool isMe;         // Tính toán từ currentUser.uid == senderId
   final DateTime timestamp;
+  final bool isRead;
 
   Message({
     this.id = '',
@@ -13,6 +14,7 @@ class Message {
     required this.senderId,
     required this.isMe,
     required this.timestamp,
+    this.isRead = false,
   });
 
   factory Message.fromFirestore(DocumentSnapshot doc, String currentUid) {
@@ -24,6 +26,7 @@ class Message {
       senderId: senderId,
       isMe: senderId == currentUid,
       timestamp: (data['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      isRead: data['isRead'] as bool? ?? false,
     );
   }
 
@@ -32,6 +35,7 @@ class Message {
       'text': text,
       'senderId': senderId,
       'timestamp': FieldValue.serverTimestamp(),
+      'isRead': isRead,
     };
   }
 }

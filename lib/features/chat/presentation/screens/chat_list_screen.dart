@@ -136,6 +136,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                               builder: (context) => ChatDetailScreen(
                                 chatId: chat.id,
                                 contactName: chat.contactName,
+                                contactUid: chat.contactUid,
                               ),
                             ),
                           );
